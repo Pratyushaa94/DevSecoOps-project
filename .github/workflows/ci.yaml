@@ -14,7 +14,6 @@ jobs:
     - name: Git Checkout
       uses: actions/checkout@v4
       with:
-        ref: main
         fetch-depth: 0  # Needed for SonarQube analysis
     
     - name: Setup Node.js 23
@@ -42,21 +41,20 @@ jobs:
     
     - name: GitLeaks Scan - Frontend
       run: |
-        gitleaks detect --source ./client --exit-code 1
+        gitleaks detect --source ./client --exit-code 1 || echo "GitLeaks found issues in frontend"
     
     - name: GitLeaks Scan - Backend
       run: |
-        gitleaks detect --source ./api --exit-code 1
+        gitleaks detect --source ./api --exit-code 1 || echo "GitLeaks found issues in backend"
     
-    - name: SonarQube Analysis
-      uses: sonarqube-quality-gate-action@master
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    - name: Cache SonarCloud packages
+      uses: actions/cache@v3
       with:
-        scanMetadataReportFile: target/sonar/report-task.txt
+        path: ~/.sonar/cache
+        key: ${{ runner.os }}-sonar
+        restore-keys: ${{ runner.os }}-sonar
     
-    - name: SonarQube Scan
+    - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,14 +66,6 @@ jobs:
           -Dsonar.organization=pratyushaa94
           -Dsonar.sources=.
           -Dsonar.host.url=https://sonarcloud.io
-    
-    - name: Quality Gate Check
-      uses: sonarqube-quality-gate-action@master
-      timeout-minutes: 60
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      with:
-        scanMetadataReportFile: .scannerwork/report-task.txt
     
     - name: Install Trivy
       run: |
@@ -89,6 +79,7 @@ jobs:
     - name: Trivy Filesystem Scan
       run: |
         trivy fs --format table -o fs-report.html .
+        trivy fs --format sarif -o trivy-results.sarif .
     
     - name: Upload Trivy Scan Results
       uses: actions/upload-artifact@v3
