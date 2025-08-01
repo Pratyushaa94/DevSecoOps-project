@@ -1,0 +1,105 @@
+# 🚀 Simple Docker CI/CD Pipeline
+# This pipeline automatically builds and deploys your app when you push code
+
+name: Deploy App to EC2
+
+# 🔄 When to run: Every time you push to this branch
+on:
+  push:
+    branches:
+      - docker_compose_access_the_app  # Change this to your main branch name
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # Use GitHub's Ubuntu server
+    
+    steps:
+      # 📥 Step 1: Download your code from GitHub
+      - name: 📥 Get Code from GitHub
+        uses: actions/checkout@v4
+
+      # ⚙️ Step 2: Install Node.js (needed to check JavaScript)
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'  # Use Node.js version 18
+
+      # ✅ Step 3: Check if your JavaScript code has errors
+      - name: ✅ Test Frontend Code
+        run: |
+          echo "🔍 Checking frontend JavaScript files..."
+          find ./client -name "*.js" -exec node --check {} + || echo "No JS files found in ./client"
+        
+      - name: ✅ Test Backend Code  
+        run: |
+          echo "🔍 Checking backend JavaScript files..."
+          find ./api -name "*.js" -exec node --check {} + || echo "No JS files found in ./api"
+
+      # 🔐 Step 4: Login to DockerHub (where we store Docker images)
+      - name: 🔐 Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}  # Your DockerHub username
+          password: ${{ secrets.DOCKER_PASSWORD }}  # Your DockerHub password/token
+
+      # 🏗️ Step 5: Build Backend Docker Image and Upload
+      - name: 🏗️ Build & Upload Backend Image
+        run: |
+          echo "🐳 Building backend Docker image..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/backend:latest ./api
+          echo "📤 Uploading backend image to DockerHub..."
+          docker push ${{ secrets.DOCKER_USERNAME }}/backend:latest
+          echo "✅ Backend image uploaded successfully!"
+
+      # 🏗️ Step 6: Build Frontend Docker Image and Upload  
+      - name: 🏗️ Build & Upload Frontend Image
+        run: |
+          echo "🐳 Building frontend Docker image..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/frontend:latest ./client
+          echo "📤 Uploading frontend image to DockerHub..."
+          docker push ${{ secrets.DOCKER_USERNAME }}/frontend:latest
+          echo "✅ Frontend image uploaded successfully!"
+
+      # 🚀 Step 7: Deploy to your EC2 server
+      - name: 🚀 Deploy to EC2 Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}      # Your EC2 IP address
+          username: ${{ secrets.EC2_USER }}  # Usually "ubuntu" or "ec2-user"
+          key: ${{ secrets.EC2_SSH_KEY }}    # Your EC2 private key
+          timeout: 300s                      # Wait max 5 minutes
+          script: |
+            echo "🎯 Starting deployment on EC2..."
+            
+            # 📁 Create app directory if it doesn't exist
+            APP_DIR="/home/$USER/app"
+            mkdir -p $APP_DIR
+            cd $APP_DIR
+            echo "📂 Working in: $APP_DIR"
+            
+            # 📥 Get your latest code
+            if [ ! -d ".git" ]; then
+              echo "📥 Cloning repository for first time..."
+              git clone https://github.com/${{ github.repository }} .
+            else
+              echo "📥 Pulling latest code..."
+              git pull origin docker_compose_access_the_app
+            fi
+            
+            # 🐳 Download the new Docker images you just built
+            echo "🐳 Downloading latest Docker images..."
+            docker compose pull
+            
+            # 🛑 Stop old containers (if running)
+            echo "🛑 Stopping old containers..."
+            docker compose down
+            
+            # 🚀 Start new containers with updated code
+            echo "🚀 Starting new containers..."
+            docker compose up -d
+            
+            # ✅ Show running containers
+            echo "✅ Deployment complete! Running containers:"
+            docker compose ps
+            
+            echo "🎉 Your app is now live at: http://${{ secrets.EC2_HOST }}"
