@@ -10,13 +10,15 @@ services:
       MYSQL_DATABASE: crud_app
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./mysql-init:/docker-entrypoint-initdb.d
+      # Remove this line if you don't have mysql-init folder
+      # - ./mysql-init:/docker-entrypoint-initdb.d
     ports:
       - "3306:3306"
 
   backend:
-    build: ./api
+    image: prathyusha687/backend:latest  # Changed from build: ./api
     container_name: backend-api
+    restart: unless-stopped
     environment:
       DB_HOST: mysql
       DB_USER: root
@@ -30,13 +32,13 @@ services:
       - "5000:5000"
 
   frontend:
-    build: ./client
+    image: prathyusha687/frontend:latest  # Changed from build: ./client
     container_name: frontend-react
+    restart: unless-stopped
     ports:
-      - "3000:80"
+      - "80:80"  # Changed from 3000:80 to 80:80
     depends_on:
       - backend
 
 volumes:
   mysql-data:
-
